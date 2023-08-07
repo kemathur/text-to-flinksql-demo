@@ -1,4 +1,4 @@
-version: '2.2'
+version: "2.2"
 
 services:
   zookeeper:
@@ -21,7 +21,7 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
   sql-client:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
     command: bin/sql-client.sh
@@ -70,3 +70,12 @@ services:
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 2
+
+  python-app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "5000:5000"
