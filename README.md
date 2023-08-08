@@ -85,6 +85,10 @@ SELECT * FROM pageviews_kafka;
 SELECT browser, COUNT(*) FROM pageviews_kafka GROUP BY browser;
 ```
 
+7. Access the Streamlit app at:
+http://localhost:8501
+
+
 7. Remember to tear down the setup when done.
 
 - type `quit;` into flink client to exit
