@@ -5,6 +5,9 @@ Demo repo for running Flink and Kafka locally using Docker and an application to
 **Prerequisites:**
 
 Install Docker and Docker compose locally
+Before running make sure to replace your Azure key in docker-compose.yaml
+
+**WARNING: Do not checkin the Azure key when doing a commit**
 
 **Steps**
 
