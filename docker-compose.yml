@@ -79,3 +79,10 @@ services:
       - seccomp:unconfined
     ports:
       - "5000:5000"
+
+  fe-app:
+    build:
+      context: ./app-fe
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
