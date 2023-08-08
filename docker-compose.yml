@@ -79,6 +79,10 @@ services:
       - seccomp:unconfined
     ports:
       - "5000:5000"
+    environment:
+      AZURE_OPENAI_ENDPOINT: "https://keshav-openai-test.openai.azure.com"
+      AZURE_OPENAI_KEY: "api-key"
+      AZURE_OPENAI_DEPLOYMENT: "test_gpt35"
 
   fe-app:
     build:
