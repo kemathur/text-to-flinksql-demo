@@ -100,7 +100,7 @@ def get_query():
                 ]
             )
         assistant_response = response['choices'][0]['message']["content"].replace('\n', '').replace(' .', '.').strip()
-        return jsonify(message=f"{assistant_response}!")
+        return jsonify(message=f"{assistant_response}")
     return jsonify(message="Hello World!")
 
 @app.route('/get-results/', methods=['GET'])
