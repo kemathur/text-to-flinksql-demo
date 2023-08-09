@@ -5,6 +5,14 @@ import re
 import logging
 import os
 
+import pandas as pd
+
+from pyflink.common import Row
+from pyflink.table import (EnvironmentSettings, TableEnvironment, TableDescriptor, Schema,
+                           DataTypes, FormatDescriptor)
+from pyflink.table.expressions import lit, col
+from pyflink.table.udf import udtf
+
 app = Flask(__name__)
 
 # Set up logging
@@ -16,6 +24,9 @@ deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
 app.logger.info(f"endpoint: {endpoint}")
 app.logger.info(f"key: {key}")
 app.logger.info(f"deployment: {deployment}")
+
+# Flink REST endpoint (local)
+# rest_url = "http://localhost:8081"
 """
 Code References:
 https://docs.streamlit.io/knowledge-base/tutorials/build-conversational-apps
@@ -29,6 +40,30 @@ openai.api_base = endpoint # your endpoint should look like the following https:
 openai.api_key = key
 openai.api_type = 'azure'
 openai.api_version = '2023-05-15' # this may change in the future
+
+# Set up PyFlink table environment with defaults
+t_env = TableEnvironment.create(EnvironmentSettings.in_streaming_mode())
+t_env.get_config().set("parallelism.default", "1")
+
+my_source_ddl = """
+    CREATE TABLE `pageviews` (
+    `url` STRING,
+    `user_id` STRING,
+    `browser` STRING,
+    `ts` TIMESTAMP(3)
+    )
+    WITH (
+    'connector' = 'faker',
+    'rows-per-second' = '10',
+    'fields.url.expression' = '/#{GreekPhilosopher.name}.html',
+    'fields.user_id.expression' = '#{numerify ''user_##''}',
+    'fields.browser.expression' = '#{Options.option ''chrome'', ''firefox'', ''safari'')}',
+    'fields.ts.expression' =  '#{date.past ''5'',''1'',''SECONDS''}'
+    );
+"""
+t_env.execute_sql(my_source_ddl)
+pageviews = t_env.from_path("pageviews")
+pageviews.limit(100).print() # Test print
 
 @app.route('/get-query/', methods=['GET'])
 def get_query():
@@ -59,6 +94,20 @@ def get_query():
         assistant_response = response['choices'][0]['message']["content"].replace('\n', '').replace(' .', '.').strip()
         return jsonify(message=f"{assistant_response}!")
     return jsonify(message="Hello World!")
+
+@app.route('/get-results/', methods=['GET'])
+def get_query_results():
+    input_query = request.args.get('flink-sql')
+    if input_query:
+        t_result = t_env.execute_sql(input_query)
+        tdf = t_result.limit(100).to_pandas()
+        return tdf.to_json(orient="records")
+    return pd.DataFrame({'A' : []}).to_json(orient="records") # empty dataframe
+
+
+@app.route('/test-pyflink/', methods=['GET'])
+def test_pyflink():
+    return pageviews.limit(100).to_pandas()
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')

@@ -1,5 +1,9 @@
 FROM python:3.8-slim-bullseye
 
+# Install Java
+RUN apt-get update && \
+    apt-get install -y default-jre && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY ./requirements.txt /app/requirements.txt
 
