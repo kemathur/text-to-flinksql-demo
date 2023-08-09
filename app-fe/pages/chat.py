@@ -9,6 +9,30 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# flink_keyword_list = [
+#     'SELECT',
+#     'CREATE', 
+#     'CATALOG', 
+#     'DATABASE', 
+#     'VIEW', 
+#     'FUNCTION',
+#     'DROP',
+#     'DATABASE', 
+#     'VIEW', 
+#     'FUNCTION',
+#     'ALTER',
+#     'ANALYZE',
+#     'INSERT',
+#     'UPDATE',
+#     'DELETE',
+#     'DESCRIBE',
+#     'EXPLAIN',
+#     'USE',
+#     'SHOW',
+#     'LOAD',
+#     'UNLOAD'
+# ]
+
 def call_api(input_text, messages):
     # Adjust the URL according to your setup
     url = "http://python-app:5000/get-query/"
@@ -40,7 +64,7 @@ def call_pyflink():
     return response
 
 #### PAGE CONFIG ####
-st.set_page_config(page_title="FlinkSQL Assistant", page_icon="📈")
+st.set_page_config(page_title="FlinkSQL Assistant", page_icon=":sunglasses:")
 st.title("Chat interface")
 
 # NOTE: test prints
@@ -92,17 +116,36 @@ if prompt := st.chat_input("What's up?"):
     
     # Add assistant response to both chat history and query palette
     st.session_state.messages.append({"role": "assistant", "content": full_response})
-
-    # TODO: is there a SQL parser we should run here before appending to state (or regexp)?
     st.session_state.query_exe.append({"role": "assistant", "sql": full_response})
 
-if st.button('Run latest response as Flink query!'):
-    if len(st.session_state.query_exe) > 0: 
-        flink_query = st.session_state.query_exe[-1]["sql"]
-        with st.spinner(f'Running query: {flink_query}'):
-            response = call_query_api(flink_query) # TODO: expecting a pandas df in json string format
-            tdf = pd.DataFrame(response).T.reset_index()
-            st.dataframe(tdf)
-        st.success('Query executed successfully!')
-    else:
-        st.write("Sorry, no valid queries in conversation history yet :-(")
+    # TODO: is there a SQL parser we should run here before appending to state (or regexp)?
+    # response_chunks = full_response.split(" ")
+    # for c in response_chunks:
+    #     if chunk.upper() in flink_keyword_list:
+    #         st.session_state.query_exe.append({"role": "assistant", "sql": full_response})
+    #         break
+
+# Using "with" notation
+with st.sidebar:
+    if len(st.session_state.query_exe) > 0:
+        st.code(
+            st.session_state.query_exe[-1]["sql"],
+            language="sql"
+        )
+    if st.button('Run latest response as Flink query!'):
+        if len(st.session_state.query_exe) > 0: 
+            flink_query = st.session_state.query_exe[-1]["sql"]
+            with st.spinner(f'Running query: {flink_query}'):
+                response = call_query_api(flink_query) # TODO: expecting a pandas df in json string format
+                tdf = pd.DataFrame(response).T.reset_index()
+                # st.dataframe(tdf)
+                st.write(response.json()['result'])
+            st.success('Query executed successfully!')
+        else:
+            st.write("Sorry, no valid queries in conversation history yet :-(")
+
+st.markdown(f'''
+    <style>
+        section[data-testid="stSidebar"] .css-vk3wp9 {{width: 14rem;}}
+    </style>
+''',unsafe_allow_html=True)
