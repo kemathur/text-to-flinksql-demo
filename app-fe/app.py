@@ -3,6 +3,11 @@ import streamlit as st
 import requests
 import json
 import pandas as pd
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 def main():
     st.title("Chat interface")
@@ -89,6 +94,9 @@ def call_query_api(flink_sql):
         "flink-sql": flink_sql,
     }
     response = requests.get(url, params=params)
+    if response.status_code != 200:
+        logger.error(response.status_code)
+        logger.error(response.text)
     response.raise_for_status()  # This will raise an exception if the API request failed
     return response
 

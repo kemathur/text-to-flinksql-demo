@@ -42,8 +42,15 @@ openai.api_type = 'azure'
 openai.api_version = '2023-05-15' # this may change in the future
 
 # Set up PyFlink table environment with defaults
-t_env = TableEnvironment.create(EnvironmentSettings.in_streaming_mode())
+env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
+t_env = TableEnvironment.create(env_settings)
+# t_env = TableEnvironment.create(EnvironmentSettings.in_streaming_mode())
 t_env.get_config().set("parallelism.default", "1")
+# comms to jobmanager
+t_env.get_config().set("jobmanager.rpc.address", "jobmanager")
+# Assume that you have a Flink catalog and data source set up
+t_env.use_catalog('default_catalog')
+t_env.use_database('default_database')
 
 # TODO: configuration does not work in Table API
 # my_source_ddl = """
@@ -100,17 +107,32 @@ def get_query():
                 ]
             )
         assistant_response = response['choices'][0]['message']["content"].replace('\n', '').replace(' .', '.').strip()
-        return jsonify(message=f"{assistant_response}!")
+        return jsonify(message=f"{assistant_response}")
     return jsonify(message="Hello World!")
 
 @app.route('/get-results/', methods=['GET'])
 def get_query_results():
-    input_query = request.args.get('flink-sql')
-    if input_query:
-        t_result = t_env.execute_sql(input_query)
-        tdf = t_result.limit(100).to_pandas()
-        return tdf.to_json(orient="records")
-    return pd.DataFrame({'A' : []}).to_json(orient="records") # empty dataframe
+    # Set up PyFlink table environment with defaults
+    # env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
+    # t_env = TableEnvironment.create(env_settings)
+    t_env = TableEnvironment.create(EnvironmentSettings.in_streaming_mode())
+    t_env.get_config().set("parallelism.default", "1")
+    # comms to jobmanager
+    t_env.get_config().set("jobmanager.rpc.address", "jobmanager")
+    # Assume that you have a Flink catalog and data source set up
+    t_env.use_catalog('default_catalog')
+    t_env.use_database('default_database')
+    try:
+        input_query = request.args.get('flink-sql')
+        app.logger.info(f"input_query: {input_query}")
+        if input_query:
+            t_result = t_env.execute_sql(input_query)
+            tdf = t_result.limit(100).to_pandas()
+            return tdf.to_json(orient="records")
+        return pd.DataFrame({'A' : []}).to_json(orient="records") # empty dataframe
+    except Exception as e:
+        app.logger.error(f"error: {e}")
+        return jsonify(error=str(e)), 500
 
 
 @app.route('/test-pyflink/', methods=['GET'])
