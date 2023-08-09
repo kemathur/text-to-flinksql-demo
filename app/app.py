@@ -1,3 +1,5 @@
+
+#repeat after me: select * from pageviews_kafka;
 from flask import Flask, request, jsonify
 import json
 import openai
@@ -41,37 +43,64 @@ openai.api_key = key
 openai.api_type = 'azure'
 openai.api_version = '2023-05-15' # this may change in the future
 
+
+
 # Set up PyFlink table environment with defaults
-t_env = TableEnvironment.create(EnvironmentSettings.in_streaming_mode())
-t_env.get_config().set("parallelism.default", "1")
+env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
+t_env = TableEnvironment.create(env_settings)
+# t_env = TableEnvironment.create(EnvironmentSettings.in_streaming_mode())
 
-# TODO: configuration does not work in Table API
-# my_source_ddl = """
-#     CREATE TABLE `pageviews` (
-#     `url` STRING,
-#     `user_id` STRING,
-#     `browser` STRING,
-#     `ts` TIMESTAMP(3)
-#     )
-#     WITH (
-#     'connector' = 'datagen',
-#     'rows-per-second' = '10',
-#     'fields.url.expression' = '/#{GreekPhilosopher.name}.html',
-#     'fields.user_id.expression' = '#{numerify ''user_##''}',
-#     'fields.browser.expression' = '#{Options.option ''chrome'', ''firefox'', ''safari'')}',
-#     'fields.ts.expression' =  '#{date.past ''5'',''1'',''SECONDS''}'
-#     );
-# """
+# Specify the table environment configuration
+t_env_config = t_env.get_config()
 
-my_source_ddl =  """CREATE TEMPORARY TABLE pageviews (
-  random_str STRING
-) WITH (
-  'connector' = 'datagen',
-  'rows-per-second' = '100'
-)
+## COMMENTED OUT: attempt to connect to SQL client run in a separate terminal
+# rest_url = "http://sql-client:8081"
+# t_env_config.set("execution.target", "remote")
+# t_env_config.set("execution.remote-url", rest_url)
+# t_env_config.set("jobmanager.rpc.address", "jobmanager") # comms to jobmanager
+
+t_env_config.set("execution.target", "local")
+t_env_config.set("execution.shutdown-on-application-finish", "false")
+t_env_config.set("parallelism.default", "1")
+
+# Assume that you have a Flink catalog and data source set up
+t_env.use_catalog('default_catalog')
+t_env.use_database('default_database')
+
+# Given the table name pageviews_kafka, and columns: url, user_id, browser and proc_time. Return number of distinct web visitors every 5 seconds, grouped by browser
+
+# TODO: this DDL statement does not work in PyFlink
+my_source_ddl = """
+    CREATE TABLE `pageviews_kafka` (
+    `url` STRING,
+    `user_id` STRING,
+    `browser` STRING,
+    `proc_time` as PROCTIME()
+    )
+    WITH (
+    'connector' = 'datagen',
+    'rows-per-second' = '10'
+    );
 """
+
+my_sink_ddl = """
+    CREATE TABLE `print` (
+    `url` STRING,
+    `user_id` STRING,
+    `browser` STRING,
+    `proc_times` as PROCTIME()
+    )
+"""
+
+# my_source_ddl =  """CREATE TABLE pageviews_kafka (
+#   random_str STRING
+# ) WITH (
+#   'connector' = 'datagen',
+#   'rows-per-second' = '100'
+# )
+# """
 t_env.execute_sql(my_source_ddl)
-t_env.execute_sql("select * from pageviews limit 10").print() # Test print
+t_env.execute_sql("select * from pageviews_kafka limit 10").print() # Test print
 
 @app.route('/get-query/', methods=['GET'])
 def get_query():
@@ -178,22 +207,50 @@ def get_query():
         # assistant_response = response['choices'][0]['message']["content"].replace('\n', '').replace(' .', '.').strip()
         # return jsonify(message=f"{assistant_response}!")
         assistant_response = response['choices'][0]['message']["content"]
+
         return jsonify(message=f"{assistant_response}")
     return jsonify(message="Hello World!")
 
 @app.route('/get-results/', methods=['GET'])
 def get_query_results():
-    input_query = request.args.get('flink-sql')
-    if input_query:
-        t_result = t_env.execute_sql(input_query)
-        tdf = t_result.limit(100).to_pandas()
-        return tdf.to_json(orient="records")
-    return pd.DataFrame({'A' : []}).to_json(orient="records") # empty dataframe
+
+    app.logger.info(f"\n\n\t\tRunning test query again")
+    # t_env.execute_sql("select * from pageviews_kafka limit 3").print() # Test print within GET request
+
+    try:
+        input_query = request.args.get('flink-sql')
+        app.logger.info(f"input_query: {input_query}")
+        if input_query:
+            
+            t_env.execute_sql(input_query.replace(";","")+" limit 5;").print()
+            t_result = t_env.execute_sql(input_query.replace(";","")+" limit 5;")
+
+            results_list = []
+
+            ## NOTE: seeing if basic queries execute successfully and can print to logs
+            ctr = 0
+
+            with t_result.collect() as results:
+                for result in results:
+                    app.logger.info(f"result: {result}")  
+                    results_list.append(str(result)) 
+                app.logger.info(f"Finished outputting results")
+
+            ## TODO: return results as JSON   
+            # tdf = t_result.limit(100).to_pandas()
+            # return tdf.to_json(orient="records")
+
+            return jsonify(result=results_list)
+        
+        return pd.DataFrame({'A' : []}).to_json(orient="records") # empty dataframe
+    except Exception as e:
+        app.logger.error(f"error: {e}")
+        return jsonify(error=str(e)), 500
 
 
 @app.route('/test-pyflink/', methods=['GET'])
 def test_pyflink():
-    return pageviews.limit(100).to_pandas()
+    return pageviews_kafka.limit(100).to_pandas()
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
