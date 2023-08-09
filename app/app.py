@@ -1,3 +1,5 @@
+
+#repeat after me: select * from pageviews;
 from flask import Flask, request, jsonify
 import json
 import openai
@@ -41,18 +43,31 @@ openai.api_key = key
 openai.api_type = 'azure'
 openai.api_version = '2023-05-15' # this may change in the future
 
+
+
 # Set up PyFlink table environment with defaults
 env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
 t_env = TableEnvironment.create(env_settings)
 # t_env = TableEnvironment.create(EnvironmentSettings.in_streaming_mode())
-t_env.get_config().set("parallelism.default", "1")
-# comms to jobmanager
-t_env.get_config().set("jobmanager.rpc.address", "jobmanager")
+
+# Specify the table environment configuration
+t_env_config = t_env.get_config()
+
+## COMMENTED OUT: attempt to connect to SQL client run in a separate terminal
+# rest_url = "http://sql-client:8081"
+# t_env_config.set("execution.target", "remote")
+# t_env_config.set("execution.remote-url", rest_url)
+# t_env_config.set("jobmanager.rpc.address", "jobmanager") # comms to jobmanager
+
+t_env_config.set("execution.target", "local")
+t_env_config.set("execution.shutdown-on-application-finish", "false")
+t_env_config.set("parallelism.default", "1")
+
 # Assume that you have a Flink catalog and data source set up
 t_env.use_catalog('default_catalog')
 t_env.use_database('default_database')
 
-# TODO: configuration does not work in Table API
+# TODO: this DDL statement does not work in PyFlink
 # my_source_ddl = """
 #     CREATE TABLE `pageviews` (
 #     `url` STRING,
@@ -70,7 +85,7 @@ t_env.use_database('default_database')
 #     );
 # """
 
-my_source_ddl =  """CREATE TEMPORARY TABLE pageviews (
+my_source_ddl =  """CREATE TABLE pageviews (
   random_str STRING
 ) WITH (
   'connector' = 'datagen',
@@ -112,23 +127,36 @@ def get_query():
 
 @app.route('/get-results/', methods=['GET'])
 def get_query_results():
-    # Set up PyFlink table environment with defaults
-    # env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
-    # t_env = TableEnvironment.create(env_settings)
-    t_env = TableEnvironment.create(EnvironmentSettings.in_streaming_mode())
-    t_env.get_config().set("parallelism.default", "1")
-    # comms to jobmanager
-    t_env.get_config().set("jobmanager.rpc.address", "jobmanager")
-    # Assume that you have a Flink catalog and data source set up
-    t_env.use_catalog('default_catalog')
-    t_env.use_database('default_database')
+    ## COMMENTED OUT: re-instantiating table env within the API call iself
+    # # Set up PyFlink table environment with defaults
+    # # env_settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
+    # # t_env = TableEnvironment.create(env_settings)
+    # t_env = TableEnvironment.create(EnvironmentSettings.in_streaming_mode())
+    # t_env.get_config().set("parallelism.default", "1")
+    # # comms to jobmanager
+    # t_env.get_config().set("jobmanager.rpc.address", "jobmanager")
+    # # Assume that you have a Flink catalog and data source set up
+    # t_env.use_catalog('default_catalog')
+    # t_env.use_database('default_database')
+
+    app.logger.info(f"\n\n\t\tRunning test query again")
+    t_env.execute_sql("select * from pageviews limit 10").print() # Test print within GET request
+
     try:
         input_query = request.args.get('flink-sql')
         app.logger.info(f"input_query: {input_query}")
         if input_query:
             t_result = t_env.execute_sql(input_query)
-            tdf = t_result.limit(100).to_pandas()
-            return tdf.to_json(orient="records")
+
+            ## NOTE: seeing if basic queries execute successfully and can print to logs
+            with t_result.collect() as results:
+                for result in results:
+                    app.logger.info(f"result: {result}")  
+
+            ## TODO: return results as JSON   
+            # tdf = t_result.limit(100).to_pandas()
+            # return tdf.to_json(orient="records")
+            return jsonify(result="blahblahblah")
         return pd.DataFrame({'A' : []}).to_json(orient="records") # empty dataframe
     except Exception as e:
         app.logger.error(f"error: {e}")
