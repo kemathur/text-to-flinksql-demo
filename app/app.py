@@ -88,18 +88,57 @@ def get_query():
             messages = json.loads(messages_str)
         except json.JSONDecodeError:
             return jsonify(error="Invalid messages format"), 400
+        prompt_fixed = """
+        You are a code generator that helps people write Flink SQL language. 
+        Return the Flink SQL select statements only so people can execute the code directly.
+
+        Remember the difference between Flink SQL and standard SQL is the use of window functions
+        such as TUMBLE, HOP and CUMULATE and GROUPING SETS.
+
+        The TUMBLE function assigns a window for each row of a relation based on a time attribute field.
+        Example: To get the total price every 10 minutes, the command is:
+        SELECT window_start, SUM(price) total_price
+        FROM TABLE(TUMBLE(TABLE your_table, DESCRIPTOR(event_ts), INTERVAL  '10' MINUTES))
+        GROUP BY window_start;
+        Example: To get the number of user logins every 30 seconds, the command is:
+        SELECT window_start, count(user_id) count_user
+        FROM TABLE(TUMBLE(TABLE your_table, DESCRIPTOR(event_ts), INTERVAL '30' seconds))
+        GROUP BY window_start;
+
+        The HOP function assigns elements to windows of fixed length. 
+
+        Example: To get the total price every 10 minutes, by supplier:
+        SELECT window_start, supplier_id, SUM(price) as price
+          FROM TABLE(
+            TUMBLE(TABLE Bid, DESCRIPTOR(bidtime), INTERVAL '10' MINUTES))
+          GROUP BY window_start, supplier_id;
+        Please do not add ORDER BY to the query. If there's no specified table names, use your_table as the default.
+
+        User input:
+        """
         response = openai.ChatCompletion.create(
-                engine=deployment, 
-                messages = 
-                [ \
-                    {"role": message["role"], "content": message["content"]}
-                    for message in messages
-                ] # Feed in past messages (both user and chatbot generated)
-                + [ \
-                    {"role": "user", "content": cleaned_text}
-                ]
-            )
-        assistant_response = response['choices'][0]['message']["content"].replace('\n', '').replace(' .', '.').strip()
+            engine=deployment,
+            #model='gpt-3.5-turbo',
+            temperature=1,
+            messages=[
+                {"role": "user", "content": prompt_fixed+cleaned_text}
+            ]
+        )
+
+        # response = openai.ChatCompletion.create(
+        #         engine=deployment,
+        #         messages =
+        #         [ \
+        #             {"role": message["role"], "content": message["content"]}
+        #             for message in messages
+        #         ] # Feed in past messages (both user and chatbot generated)
+        #         + [ \
+        #             {"role": "user", "content": cleaned_text}
+        #         ]
+        #     )
+        # assistant_response = response['choices'][0]['message']["content"].replace('\n', '').replace(' .', '.').strip()
+        # return jsonify(message=f"{assistant_response}!")
+        assistant_response = response['choices'][0]['message']["content"]
         return jsonify(message=f"{assistant_response}")
     return jsonify(message="Hello World!")
 
