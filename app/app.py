@@ -117,18 +117,97 @@ def get_query():
             messages = json.loads(messages_str)
         except json.JSONDecodeError:
             return jsonify(error="Invalid messages format"), 400
-        response = openai.ChatCompletion.create(
-                engine=deployment, 
-                messages = 
-                [ \
-                    {"role": message["role"], "content": message["content"]}
-                    for message in messages
-                ] # Feed in past messages (both user and chatbot generated)
-                + [ \
-                    {"role": "user", "content": cleaned_text}
+        
+        prompt_ksql = """
+        You are a code generator that helps people translate KSQL to Flink SQL. 
+        Return the Flink SQL select statements only so people can execute the code directly.
+
+        Remember the difference between KSQL and Flink SQL is syntax for window functions
+        such as TUMBLE and HOP commands. Unlike in KSQL where you can just call WINDOW TUMBLING,
+        in Flink SQL you need to run TUMBLE(Table table_name, DESCRIPTOR(rowtime), INTERVAL X) to specify
+        the window length.
+
+        Example KSQL input:
+        SELECT windowstart, count(*) AS cnt
+        FROM your_table
+        WINDOW TUMBLING (SIZE 5 SECONDS)
+        GROUP BY windowstart
+        EMIT CHANGES;
+
+        Correct Output:
+        SELECT window_start as windowstart, count(*) AS cnt
+        FROM TABLE(
+          TUMBLE(TABLE your_table, DESCRIPTOR(rowtime), INTERVAL '5' SECOND))
+        GROUP BY window_start;
+
+        Please do not add ORDER BY to Flink SQL query.
+        User input:
+        """
+        
+        
+        prompt_fixed = """
+        You are a code generator that helps people write Flink SQL language. 
+        Return the Flink SQL select statements only so people can execute the code directly.
+
+        Remember the difference between Flink SQL and standard SQL is the use of window functions
+        such as TUMBLE, HOP and CUMULATE and GROUPING SETS.
+
+        The TUMBLE function assigns a window for each row of a relation based on a time attribute field.
+        Example: To get the total price every 10 minutes, the command is:
+        SELECT window_start, SUM(price) total_price
+        FROM TABLE(TUMBLE(TABLE your_table, DESCRIPTOR(event_ts), INTERVAL  '10' MINUTES))
+        GROUP BY window_start;
+        Example: To get the number of user logins every 30 seconds, the command is:
+        SELECT window_start, count(user_id) count_user
+        FROM TABLE(TUMBLE(TABLE your_table, DESCRIPTOR(event_ts), INTERVAL '30' seconds))
+        GROUP BY window_start;
+
+        The HOP function assigns elements to windows of fixed length. 
+
+        Example: To get the total price every 10 minutes, by supplier:
+        SELECT window_start, supplier_id, SUM(price) as price
+          FROM TABLE(
+            TUMBLE(TABLE Bid, DESCRIPTOR(bidtime), INTERVAL '10' MINUTES))
+          GROUP BY window_start, supplier_id;
+        Please do not add ORDER BY to the query. If there's no specified table names, use your_table as the default.
+
+        User input:
+        """
+        
+        if 'ksql' in cleaned_text.lower():
+            response = openai.ChatCompletion.create(
+                engine=deployment,
+                #model='gpt-3.5-turbo',
+                temperature=1,
+                messages=[
+                    {"role": "user", "content": prompt_ksql+cleaned_text}
                 ]
             )
-        assistant_response = response['choices'][0]['message']["content"].replace('\n', '').replace(' .', '.').strip()
+        else: 
+            response = openai.ChatCompletion.create(
+                engine=deployment,
+                #model='gpt-3.5-turbo',
+                temperature=1,
+                messages=[
+                    {"role": "user", "content": prompt_fixed+cleaned_text}
+                ]
+            )
+
+        # response = openai.ChatCompletion.create(
+        #         engine=deployment,
+        #         messages =
+        #         [ \
+        #             {"role": message["role"], "content": message["content"]}
+        #             for message in messages
+        #         ] # Feed in past messages (both user and chatbot generated)
+        #         + [ \
+        #             {"role": "user", "content": cleaned_text}
+        #         ]
+        #     )
+        # assistant_response = response['choices'][0]['message']["content"].replace('\n', '').replace(' .', '.').strip()
+        # return jsonify(message=f"{assistant_response}!")
+        assistant_response = response['choices'][0]['message']["content"]
+
         return jsonify(message=f"{assistant_response}")
     return jsonify(message="Hello World!")
 
