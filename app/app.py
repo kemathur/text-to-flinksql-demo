@@ -45,25 +45,33 @@ openai.api_version = '2023-05-15' # this may change in the future
 t_env = TableEnvironment.create(EnvironmentSettings.in_streaming_mode())
 t_env.get_config().set("parallelism.default", "1")
 
-my_source_ddl = """
-    CREATE TABLE `pageviews` (
-    `url` STRING,
-    `user_id` STRING,
-    `browser` STRING,
-    `ts` TIMESTAMP(3)
-    )
-    WITH (
-    'connector' = 'faker',
-    'rows-per-second' = '10',
-    'fields.url.expression' = '/#{GreekPhilosopher.name}.html',
-    'fields.user_id.expression' = '#{numerify ''user_##''}',
-    'fields.browser.expression' = '#{Options.option ''chrome'', ''firefox'', ''safari'')}',
-    'fields.ts.expression' =  '#{date.past ''5'',''1'',''SECONDS''}'
-    );
+# TODO: configuration does not work in Table API
+# my_source_ddl = """
+#     CREATE TABLE `pageviews` (
+#     `url` STRING,
+#     `user_id` STRING,
+#     `browser` STRING,
+#     `ts` TIMESTAMP(3)
+#     )
+#     WITH (
+#     'connector' = 'datagen',
+#     'rows-per-second' = '10',
+#     'fields.url.expression' = '/#{GreekPhilosopher.name}.html',
+#     'fields.user_id.expression' = '#{numerify ''user_##''}',
+#     'fields.browser.expression' = '#{Options.option ''chrome'', ''firefox'', ''safari'')}',
+#     'fields.ts.expression' =  '#{date.past ''5'',''1'',''SECONDS''}'
+#     );
+# """
+
+my_source_ddl =  """CREATE TEMPORARY TABLE pageviews (
+  random_str STRING
+) WITH (
+  'connector' = 'datagen',
+  'rows-per-second' = '100'
+)
 """
 t_env.execute_sql(my_source_ddl)
-pageviews = t_env.from_path("pageviews")
-# pageviews.execute_sql("select * from pageviews limit 10").print() # Test print
+t_env.execute_sql("select * from pageviews limit 10").print() # Test print
 
 @app.route('/get-query/', methods=['GET'])
 def get_query():
