@@ -75,7 +75,7 @@ my_source_ddl = """
     `url` STRING,
     `user_id` STRING,
     `browser` STRING,
-    `proc_times` as PROCTIME()
+    `proc_time` as PROCTIME()
     )
     WITH (
     'connector' = 'datagen',
@@ -136,22 +136,26 @@ def get_query():
 def get_query_results():
 
     app.logger.info(f"\n\n\t\tRunning test query again")
-    t_env.execute_sql("select * from pageviews_kafka limit 3").print() # Test print within GET request
+    # t_env.execute_sql("select * from pageviews_kafka limit 3").print() # Test print within GET request
 
     try:
         input_query = request.args.get('flink-sql')
         app.logger.info(f"input_query: {input_query}")
         if input_query:
-            t_env.execute_sql(input_query.replace(";","")+" limit 100;").print() # t_env.execute_sql("select * from pageviews_kafka limit 6").print() # Test print within GET request
-            t_result = t_env.execute_sql(input_query.replace(";","")+" limit 100;")
+            
+            t_env.execute_sql(input_query.replace(";","")+" limit 5;").print()
+            t_result = t_env.execute_sql(input_query.replace(";","")+" limit 5;")
 
             results_list = []
 
             ## NOTE: seeing if basic queries execute successfully and can print to logs
+            ctr = 0
+
             with t_result.collect() as results:
                 for result in results:
                     app.logger.info(f"result: {result}")  
-                    results_list.append(str(result))
+                    results_list.append(str(result)) 
+                app.logger.info(f"Finished outputting results")
 
             ## TODO: return results as JSON   
             # tdf = t_result.limit(100).to_pandas()
