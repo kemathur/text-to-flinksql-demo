@@ -63,7 +63,7 @@ my_source_ddl = """
 """
 t_env.execute_sql(my_source_ddl)
 pageviews = t_env.from_path("pageviews")
-pageviews.limit(100).print() # Test print
+# pageviews.execute_sql("select * from pageviews limit 10").print() # Test print
 
 @app.route('/get-query/', methods=['GET'])
 def get_query():
