@@ -88,6 +88,34 @@ def get_query():
             messages = json.loads(messages_str)
         except json.JSONDecodeError:
             return jsonify(error="Invalid messages format"), 400
+        
+        prompt_ksql = """
+        You are a code generator that helps people translate KSQL to Flink SQL. 
+        Return the Flink SQL select statements only so people can execute the code directly.
+
+        Remember the difference between KSQL and Flink SQL is syntax for window functions
+        such as TUMBLE and HOP commands. Unlike in KSQL where you can just call WINDOW TUMBLING,
+        in Flink SQL you need to run TUMBLE(Table table_name, DESCRIPTOR(rowtime), INTERVAL X) to specify
+        the window length.
+
+        Example KSQL input:
+        SELECT windowstart, count(*) AS cnt
+        FROM your_table
+        WINDOW TUMBLING (SIZE 5 SECONDS)
+        GROUP BY windowstart
+        EMIT CHANGES;
+
+        Correct Output:
+        SELECT window_start as windowstart, count(*) AS cnt
+        FROM TABLE(
+          TUMBLE(TABLE your_table, DESCRIPTOR(rowtime), INTERVAL '5' SECOND))
+        GROUP BY window_start;
+
+        Please do not add ORDER BY to Flink SQL query.
+        User input:
+        """
+        
+        
         prompt_fixed = """
         You are a code generator that helps people write Flink SQL language. 
         Return the Flink SQL select statements only so people can execute the code directly.
@@ -116,14 +144,25 @@ def get_query():
 
         User input:
         """
-        response = openai.ChatCompletion.create(
-            engine=deployment,
-            #model='gpt-3.5-turbo',
-            temperature=1,
-            messages=[
-                {"role": "user", "content": prompt_fixed+cleaned_text}
-            ]
-        )
+        
+        if 'ksql' in cleaned_text.lower():
+            response = openai.ChatCompletion.create(
+                engine=deployment,
+                #model='gpt-3.5-turbo',
+                temperature=1,
+                messages=[
+                    {"role": "user", "content": prompt_ksql+cleaned_text}
+                ]
+            )
+        else: 
+            response = openai.ChatCompletion.create(
+                engine=deployment,
+                #model='gpt-3.5-turbo',
+                temperature=1,
+                messages=[
+                    {"role": "user", "content": prompt_fixed+cleaned_text}
+                ]
+            )
 
         # response = openai.ChatCompletion.create(
         #         engine=deployment,
